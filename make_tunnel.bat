@@ -61,17 +61,15 @@ REM ===== 7. Register Config File =====
 echo.
 set /p ADD_CONF=Add to SSH config? (Y/N): 
 if /i "%ADD_CONF%"=="Y" (
-    echo [PROC] Appending to config in UTF-8...
-    
-    REM Define the block to add
-    set "NL=^"
-    set "NEW_ENTRY=Host %CONFIG_ALIAS%`n    HostName %TARGET_HOST%`n    User %TARGET_USER%`n    Port %TARGET_PORT%`n    IdentityFile %KEY_PATH%"
+    echo [PROC] Appending to config...
 
-    REM Use PowerShell to append in UTF-8 without BOM
-    powershell -NoProfile -Command ^
-        "$content = '%NEW_ENTRY%'.Replace('`n', [System.Environment]::NewLine);" ^
-        "if (Test-Path '%CONFIG_PATH%') { $existing = Get-Content '%CONFIG_PATH%' -Raw; $content = \"$existing`n$content\" };" ^
-        "[System.IO.File]::WriteAllLines('%CONFIG_PATH%', $content, (New-Object System.Text.UTF8Encoding($false)))"
+    REM 파일 끝에 줄바꿈을 추가하여 기존 내용과 섞이지 않게 함
+    echo. >> "%CONFIG_PATH%"
+    echo Host %CONFIG_ALIAS% >> "%CONFIG_PATH%"
+    echo     HostName %TARGET_HOST% >> "%CONFIG_PATH%"
+    echo     User %TARGET_USER% >> "%CONFIG_PATH%"
+    echo     Port %TARGET_PORT% >> "%CONFIG_PATH%"
+    echo     IdentityFile %KEY_PATH% >> "%CONFIG_PATH%"
 
     echo [DONE] Config registered successfully!
 )
