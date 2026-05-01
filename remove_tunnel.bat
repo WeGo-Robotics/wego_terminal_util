@@ -4,6 +4,30 @@ chcp 437 >nul
 
 set "TARGET_HOST=%~1"
 
+if /i "%TARGET_HOST%"=="?"      goto :SHOW_HELP
+if /i "%TARGET_HOST%"=="h"      goto :SHOW_HELP
+if /i "%TARGET_HOST%"=="-h"     goto :SHOW_HELP
+if /i "%TARGET_HOST%"=="/h"     goto :SHOW_HELP
+if /i "%TARGET_HOST%"=="/?"     goto :SHOW_HELP
+if /i "%TARGET_HOST%"=="help"   goto :SHOW_HELP
+if /i "%TARGET_HOST%"=="--help" goto :SHOW_HELP
+goto :MAIN
+
+:SHOW_HELP
+echo.
+echo Usage: remove_tunnel ^<device_ip^>
+echo.
+echo   device_ip : Target device IP or hostname to remove
+echo.
+echo Example:
+echo   remove_tunnel 192.168.0.10
+echo.
+echo This removes matching key files from ~/.ssh and entries from ~/.ssh/config.
+echo.
+endlocal
+exit /b 0
+
+:MAIN
 if "%TARGET_HOST%"=="" (
     set /p "TARGET_HOST=Enter Target IP/Hostname to remove: "
 )

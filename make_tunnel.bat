@@ -2,6 +2,35 @@
 setlocal EnableExtensions
 chcp 65001 >nul
 
+REM ===== 0. Help =====
+set "ARG1=%~1"
+if /i "%ARG1%"=="?"      goto :SHOW_HELP
+if /i "%ARG1%"=="h"      goto :SHOW_HELP
+if /i "%ARG1%"=="-h"     goto :SHOW_HELP
+if /i "%ARG1%"=="/h"     goto :SHOW_HELP
+if /i "%ARG1%"=="/?"     goto :SHOW_HELP
+if /i "%ARG1%"=="help"   goto :SHOW_HELP
+if /i "%ARG1%"=="--help" goto :SHOW_HELP
+goto :MAIN
+
+:SHOW_HELP
+echo.
+echo Usage: make_tunnel ^<username^> ^<device_ip^> ^<port^> [hostname]
+echo.
+echo   username   : SSH username for the target device
+echo   device_ip  : Target device IP or hostname (e.g. 192.168.1.100)
+echo   port       : SSH port (default: 22)
+echo   hostname   : Alias to identify the device (optional, multiple aliases per IP allowed)
+echo.
+echo Example:
+echo   make_tunnel wego 192.168.0.10 22 GO2X_001
+echo.
+echo This generates an SSH key, registers it on the target, and adds an entry to ~/.ssh/config.
+echo.
+endlocal
+exit /b 0
+
+:MAIN
 REM ===== 1. Process User Input =====
 set "TARGET_USER=%~1"
 set "TARGET_HOST=%~2"

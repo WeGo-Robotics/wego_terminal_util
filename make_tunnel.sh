@@ -1,5 +1,27 @@
 #!/bin/bash
 
+# ===== 0. Help =====
+case "$1" in
+    "?"|h|-h|--help|help)
+        cat <<'EOF'
+
+Usage: make_tunnel <username> <device_ip> <port> [hostname]
+
+  username   : SSH username for the target device
+  device_ip  : Target device IP or hostname (e.g. 192.168.1.100)
+  port       : SSH port (default: 22)
+  hostname   : Alias to identify the device (optional, multiple aliases per IP allowed)
+
+Example:
+  make_tunnel wego 192.168.0.10 22 GO2X_001
+
+This generates an SSH key, registers it on the target, and adds an entry to ~/.ssh/config.
+
+EOF
+        exit 0
+        ;;
+esac
+
 # ===== 1. Process User Input =====
 TARGET_USER=$1
 TARGET_HOST=$2

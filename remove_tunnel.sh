@@ -2,6 +2,24 @@
 
 TARGET_HOST=$1
 
+case "$TARGET_HOST" in
+    "?"|h|-h|--help|help)
+        cat <<'EOF'
+
+Usage: remove_tunnel <device_ip>
+
+  device_ip : Target device IP or hostname to remove
+
+Example:
+  remove_tunnel 192.168.0.10
+
+This removes matching key files from ~/.ssh and entries from ~/.ssh/config.
+
+EOF
+        exit 0
+        ;;
+esac
+
 # 1. Get input if argument is missing
 if [ -z "$TARGET_HOST" ]; then
     read -p "Enter Target IP/Hostname to remove: " TARGET_HOST
