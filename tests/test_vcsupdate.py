@@ -190,93 +190,67 @@ class RepoListParseTest(unittest.TestCase):
         self.assertEqual(st["src/a"].behind, 1)
 
 
-class RepoListMergeTest(unittest.TestCase):
-    # SAMPLE_REPOS keys already carry the src/ prefix, so disable prefixing here.
-    def test_present_missing_extra(self):
-        root = repolist.build_tree(
-            "robot:/ws", SAMPLE_REPOS, SAMPLE_EXPORT, SAMPLE_STATUS, import_prefix="",
-        )
-        by_path = {n.path: n for n in root.children}
-        self.assertEqual(by_path["src/pkg_a"].state, repolist.PRESENT)
-        self.assertEqual(by_path["src/pkg_b"].state, repolist.MISSING)
-        self.assertEqual(by_path["src/pkg_c"].state, repolist.EXTRA)
-
-    def test_status_boost(self):
-        root = repolist.build_tree("robot:/ws", SAMPLE_REPOS, SAMPLE_EXPORT, SAMPLE_STATUS, import_prefix="")
-        by_path = {n.path: n for n in root.children}
-        self.assertEqual(by_path["src/pkg_a"].actual_branch, "main")
-        self.assertTrue(by_path["src/pkg_a"].dirty)
-        self.assertFalse(by_path["src/pkg_c"].dirty)
-
-    def test_defined_version_preserved(self):
-        root = repolist.build_tree("robot:/ws", SAMPLE_REPOS, SAMPLE_EXPORT, SAMPLE_STATUS, import_prefix="")
-        by_path = {n.path: n for n in root.children}
-        self.assertEqual(by_path["src/pkg_a"].defined_version, "main")
-        self.assertEqual(by_path["src/pkg_b"].defined_version, "devel")
-
-    def test_no_repos_file_falls_back_to_export(self):
-        root = repolist.build_tree("robot:/ws", "", SAMPLE_EXPORT, "", import_prefix="")
-        states = {n.path: n.state for n in root.children}
-        # everything on the robot is "extra" when there is no definition
-        self.assertEqual(states["src/pkg_a"], repolist.EXTRA)
-        self.assertEqual(states["src/pkg_c"], repolist.EXTRA)
-
-
-# Real-world scenario: bare .repos keys, repos imported under src/, meta repo is
-# itself a git repo, sub-repos found via `vcs status --nested`.
-BARE_REPOS = """\
-repositories:
-  radius-core:
-    type: git
-    url: git@github.com:org/radius-core.git
-    version: main
-  radius-piper:
-    type: git
-    url: git@github.com:org/radius-piper.git
-    version: main
-"""
-
-# vcstool prints paths with a ./ prefix when the scan root is "." — defined keys
-# (src/radius-core) must still match these (./src/radius-core).
+# Tree is built from each repo's own git state (status -sb + origin url), no
+# .repos manifest. vcstool prints ./ prefixes when the scan root is ".".
 NESTED_STATUS = """\
 === ./. (git) ===
 ## main
 === ./src/radius-core (git) ===
 ## main...origin/main [ahead 1, behind 2]
  M ./src/radius-core/x.py
-=== ./src/radius-extra (git) ===
-## dev
+=== ./src/radius-piper (git) ===
+## dev...origin/dev
+"""
+
+NESTED_URLS = """\
+=== ./. (git) ===
+git@github.com:org/radius-posco-ws.git
+=== ./src/radius-core (git) ===
+git@github.com:org/radius-core.git
+=== ./src/radius-piper (git) ===
+git@github.com:org/radius-piper.git
 """
 
 
-class PrefixMetaMergeTest(unittest.TestCase):
-    def test_prefix_matches_defined_to_actual(self):
-        root = repolist.build_tree(
-            "robot:radius-posco-ws", BARE_REPOS, "", NESTED_STATUS,
-            import_prefix="src", ws_name="radius-posco-ws",
+class ParseRemoteUrlsTest(unittest.TestCase):
+    def test_parse(self):
+        urls = repolist.parse_remote_urls(NESTED_URLS)
+        self.assertEqual(urls["./src/radius-core"], "git@github.com:org/radius-core.git")
+        self.assertEqual(urls["./."], "git@github.com:org/radius-posco-ws.git")
+
+    def test_skips_error_lines(self):
+        text = "=== ./src/a (git) ===\nerror: No such remote 'origin'\n"
+        self.assertEqual(repolist.parse_remote_urls(text), {})
+
+
+class GitRemoteTreeTest(unittest.TestCase):
+    def _tree(self):
+        return repolist.build_tree(
+            "robot:radius-posco-ws", NESTED_STATUS, NESTED_URLS, ws_name="radius-posco-ws",
         )
-        by_path = {n.path: n for n in root.children}
-        # defined radius-core -> src/radius-core matches the nested status repo
-        self.assertEqual(by_path["src/radius-core"].state, repolist.PRESENT)
-        self.assertTrue(by_path["src/radius-core"].dirty)
-        self.assertEqual(by_path["src/radius-core"].ahead, 1)
-        self.assertEqual(by_path["src/radius-core"].behind, 2)
-        self.assertEqual(by_path["src/radius-core"].changes, 1)
-        # defined but not on robot
-        self.assertEqual(by_path["src/radius-piper"].state, repolist.MISSING)
-        # on robot but not defined
-        self.assertEqual(by_path["src/radius-extra"].state, repolist.EXTRA)
+
+    def test_repos_from_git_state(self):
+        by_path = {n.path: n for n in self._tree().children}
+        self.assertEqual(set(by_path), {"src/radius-core", "src/radius-piper"})
+        core = by_path["src/radius-core"]
+        self.assertEqual(core.actual_branch, "main")
+        self.assertEqual((core.ahead, core.behind, core.changes), (1, 2, 1))
+        self.assertEqual(core.url, "git@github.com:org/radius-core.git")
+        self.assertEqual(core.state, repolist.PRESENT)
 
     def test_meta_repo_detected_as_root(self):
-        root = repolist.build_tree(
-            "robot:radius-posco-ws", BARE_REPOS, "", NESTED_STATUS,
-            import_prefix="src", ws_name="radius-posco-ws",
-        )
-        self.assertTrue(root.is_repo)              # root is the meta git repo
+        root = self._tree()
+        self.assertTrue(root.is_repo)
         self.assertEqual(root.actual_branch, "main")
-        # the "." meta entry is not duplicated as a child
+        self.assertEqual(root.url, "git@github.com:org/radius-posco-ws.git")
+        # meta entry not duplicated as a child
         self.assertNotIn(".", {n.path for n in root.children})
         self.assertNotIn("radius-posco-ws", {n.path for n in root.children})
+
+    def test_url_only_repo_listed(self):
+        # a repo with a url but no status line still appears
+        root = repolist.build_tree("ws", "", NESTED_URLS, ws_name="radius-posco-ws")
+        self.assertIn("src/radius-core", {n.path for n in root.children})
 
 
 class SplitLinesTest(unittest.TestCase):

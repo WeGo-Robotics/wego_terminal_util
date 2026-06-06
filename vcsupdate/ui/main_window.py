@@ -111,9 +111,9 @@ class MainWindow(ttk.Frame):
         ttk.Entry(row, textvariable=self.workspace_var, width=28).pack(side="left", padx=2)
         ttk.Label(row, text="src subdir:").pack(side="left", padx=(8, 0))
         ttk.Entry(row, textvariable=self.prefix_var, width=6).pack(side="left", padx=2)
-        ttk.Label(row, text=".repos (remote):").pack(side="left", padx=(8, 0))
-        ttk.Entry(row, textvariable=self.repos_var, width=24).pack(side="left", padx=2)
-        ttk.Label(row, text="(path on robot, rel. to workspace)",
+        ttk.Label(row, text=".repos (import only):").pack(side="left", padx=(8, 0))
+        ttk.Entry(row, textvariable=self.repos_var, width=20).pack(side="left", padx=2)
+        ttk.Label(row, text="(robot path; for vcs import)",
                   foreground="#888888").pack(side="left")
         ttk.Label(row, text="Workers:").pack(side="left", padx=(8, 0))
         ttk.Spinbox(row, from_=1, to=32, width=4, textvariable=self.workers_var).pack(side="left")
@@ -172,13 +172,13 @@ class MainWindow(ttk.Frame):
         self.tree.heading("sync", text="↓↑")
         self.tree.heading("changes", text="Changes")
         self.tree.heading("state", text="State")
-        self.tree.heading("version", text="Defined")
-        self.tree.column("#0", width=260, anchor="w")
-        self.tree.column("branch", width=120, anchor="w")
-        self.tree.column("sync", width=70, anchor="center")
-        self.tree.column("changes", width=70, anchor="center")
-        self.tree.column("state", width=70, anchor="center")
-        self.tree.column("version", width=90, anchor="w")
+        self.tree.heading("version", text="Remote (origin)")
+        self.tree.column("#0", width=240, anchor="w")
+        self.tree.column("branch", width=110, anchor="w")
+        self.tree.column("sync", width=64, anchor="center")
+        self.tree.column("changes", width=64, anchor="center")
+        self.tree.column("state", width=60, anchor="center")
+        self.tree.column("version", width=300, anchor="w")
         self.tree.tag_configure("present", foreground="#222222")
         self.tree.tag_configure("missing", foreground="#dc322f")
         self.tree.tag_configure("extra", foreground="#268bd2")
@@ -260,32 +260,22 @@ class MainWindow(ttk.Frame):
         ws = self.workspace_var.get().strip()
         if not self._require(ws):
             return
-        repos_path = self.repos_var.get().strip()
         self._save_settings()
         self.task_var.set("refreshing tree…")
 
         def task(w: WorkerThread) -> None:
-            # read the .repos that lives on the robot (defined set)
-            repos_text = ""
-            if repos_path:
-                rc0, repos_text, err0 = capture_exec(self._client, commands.cat(ws, repos_path))
-                if rc0 != 0:
-                    w.post(LogLine(f"cannot read remote .repos ({repos_path}): "
-                                   f"{err0.strip()}", "err"))
-                    repos_text = ""
-            w.post(LogLine(f"$ {commands.vcs_export(ws)}", "info"))
-            rc, export_text, err = capture_exec(self._client, commands.vcs_export(ws))
+            w.post(LogLine(f"$ {commands.vcs_status_short(ws)}", "info"))
+            rc, status_text, err = capture_exec(self._client, commands.vcs_status_short(ws))
             if rc != 0:
-                w.post(LogLine(err.strip() or "vcs export failed", "err"))
+                w.post(LogLine(err.strip() or "vcs status failed", "err"))
                 if rc == 127:
                     w.post(LogLine("vcstool not installed on robot? (pip install vcstool)", "err"))
-            _rc2, status_text, _err2 = capture_exec(self._client, commands.vcs_status_short(ws))
+            # each repo's configured origin remote (the thing we pull/push against)
+            _rcu, url_text, _erru = capture_exec(self._client, commands.git_remote_urls(ws))
             root = repolist.build_tree(
                 workspace_label=f"{self.alias_var.get()}:{ws}",
-                repos_text=repos_text,
-                export_text=export_text,
                 status_text=status_text,
-                import_prefix=self.prefix_var.get(),
+                url_text=url_text,
                 ws_name=posixpath.basename(ws.rstrip("/")),
             )
             w.post(RepoList(root=root))
@@ -458,7 +448,7 @@ class MainWindow(ttk.Frame):
         root_iid = self.tree.insert(
             "", "end", text=label, open=True,
             values=(root.actual_branch, self._sync_str(root), self._changes_str(root),
-                    root_state, ""),
+                    root_state, root.url),
             tags=tuple(root_tags),
         )
         self._node_by_iid[root_iid] = root
@@ -469,7 +459,7 @@ class MainWindow(ttk.Frame):
             iid = self.tree.insert(
                 root_iid, "end", text=node.path,
                 values=(node.actual_branch, self._sync_str(node), self._changes_str(node),
-                        node.state, node.defined_version),
+                        node.state, node.url),
                 tags=tuple(tags),
             )
             self._node_by_iid[iid] = node

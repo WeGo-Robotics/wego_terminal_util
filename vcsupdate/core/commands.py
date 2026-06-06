@@ -64,6 +64,11 @@ def vcs_status_short(ws: str) -> str:
     return _in_dir(ws, "vcs custom . --nested --git --args status -sb")
 
 
+def git_remote_urls(ws: str) -> str:
+    """Per-repo origin remote URL via vcs custom (nested-aware), for the tree."""
+    return _in_dir(ws, "vcs custom . --nested --git --args remote get-url origin")
+
+
 def vcs_pull(ws: str, workers: int = 8) -> str:
     return _in_dir(ws, f"vcs pull . --nested --workers {int(workers)}")
 
