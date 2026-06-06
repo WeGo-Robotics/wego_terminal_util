@@ -102,6 +102,11 @@ def cat(ws: str, path: str) -> str:
     return _in_dir(ws, f"cat {shquote(path)}")
 
 
+def find_repos(ws: str) -> str:
+    """List ``*.repos`` files in the meta repo (workspace root), bare names."""
+    return _in_dir(ws, "find . -maxdepth 1 -name '*.repos' -printf '%P\\n'")
+
+
 def vcs_validate_stdin() -> str:
     return "vcs validate"
 

@@ -39,6 +39,10 @@ class CommandsTest(unittest.TestCase):
         )
         self.assertEqual(commands.cat("/home/ws", "radius.repos"),
                          "cd /home/ws && cat radius.repos")
+        self.assertEqual(
+            commands.find_repos("/home/ws"),
+            "cd /home/ws && find . -maxdepth 1 -name '*.repos' -printf '%P\\n'",
+        )
 
     def test_path_with_spaces_is_quoted(self):
         cmd = commands.vcs_status("/home/my ws")

@@ -67,15 +67,14 @@ python run_vcsupdate.py
 |---|---|
 | **Robot** | `~/.ssh/config` Host 별칭 드롭다운. 로봇 SSH 접속 대상 |
 | **Workspace (remote)** | 로봇의 메타 워크스페이스 경로 (예: `radius-posco-ws`) |
-| **src subdir** | `.repos` 가 import 되는 하위 폴더. 기본 `src`. 루트면 비움 |
-| **.repos (import only)** | 로봇의 `.repos` 경로. **`vcs import`(신규 clone) 에만** 사용. 트리/비교는 .repos 가 아니라 각 repo 의 git remote 를 참조하므로 평소엔 비워도 됨 |
+| **src subdir** | `vcs import` 가 clone 하는 하위 폴더. 기본 `src`. 루트면 비움 |
 | **Workers** | vcstool 병렬 워커 수 (기본 8) |
 | **GitHub SSH key (local)** | 로봇에 주입할 키. 자동 탐지, 변경 가능 |
 
 ### 절차
 1. **Robot** 선택 → **GitHub SSH key** 확인 → **Connect**. 연결되면 키를 로봇 RAM 에
    주입하고 지문을 표시.
-2. **Workspace** 지정. (**src subdir**, **.repos** 는 `vcs import` 할 때만 필요)
+2. **Workspace** 지정. (**src subdir** 는 `vcs import` 할 때만 의미 있음)
 3. **Refresh tree** 로 repo 트리를 채움.
 4. 트리에서 repo 선택 후 작업(아래) 실행. 로그 창에서 실시간 진행 확인.
 5. 창을 닫으면 로봇 RAM 의 키가 삭제됨.
@@ -110,10 +109,11 @@ upstream 기준 ahead/behind)와 `vcs custom --git --args remote get-url origin`
 
 ## 5. 작업
 
-### 전체 일괄 (툴바)
+### 전체 일괄 (툴바) — **트리에서 메타(루트) 노드를 선택했을 때만 활성화**
 - **vcs status** — 워크스페이스 전체 verbose 상태(로그).
 - **vcs pull** — 모든 repo `vcs pull --nested`.
-- **vcs import** — 로봇의 remote `.repos`(`--input`) 기준 신규 clone/동기화 (`src` 하위).
+- **vcs import** — 메타 repo 안에서 자동 탐지한 `.repos`(`--input`) 기준 신규
+  clone/동기화 (`src subdir` 하위). 메타 repo 에 `*.repos` 가 없으면 비활성/경고.
 
 ### 선택 repo (툴바 / 우클릭 메뉴)
 - **git pull** — `git pull --ff-only`.

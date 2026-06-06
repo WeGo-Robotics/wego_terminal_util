@@ -55,12 +55,13 @@ class MainWindow(ttk.Frame):
         self._git_ssh = ""           # GIT_SSH_COMMAND value for the injected key
         self._cred_ready = False     # Tk-side flag: key injected, git auth ready
         self._node_by_iid = {}       # tree iid -> RepoNode
+        self._root_iid = ""          # tree iid of the meta/workspace root node
+        self._meta_repos = ""        # .repos filename found in the meta repo (for import)
 
         self._settings = settings.load()
         s = self._settings
         self.alias_var = tk.StringVar(value=s.get("alias", ""))
         self.workspace_var = tk.StringVar(value=s.get("workspace", ""))
-        self.repos_var = tk.StringVar(value=s.get("repos", ""))
         self.prefix_var = tk.StringVar(value=s.get("prefix", "src"))  # subdir .repos imports into
         self.key_var = tk.StringVar(value=s.get("key") or github_identity_file())
         self.workers_var = tk.IntVar(value=int(s.get("workers", 8)))
@@ -80,7 +81,6 @@ class MainWindow(ttk.Frame):
         self._settings.update({
             "alias": self.alias_var.get(),
             "workspace": self.workspace_var.get(),
-            "repos": self.repos_var.get(),
             "prefix": self.prefix_var.get(),
             "key": self.key_var.get(),
             "workers": int(self.workers_var.get()),
@@ -111,10 +111,7 @@ class MainWindow(ttk.Frame):
         ttk.Entry(row, textvariable=self.workspace_var, width=28).pack(side="left", padx=2)
         ttk.Label(row, text="src subdir:").pack(side="left", padx=(8, 0))
         ttk.Entry(row, textvariable=self.prefix_var, width=6).pack(side="left", padx=2)
-        ttk.Label(row, text=".repos (import only):").pack(side="left", padx=(8, 0))
-        ttk.Entry(row, textvariable=self.repos_var, width=20).pack(side="left", padx=2)
-        ttk.Label(row, text="(robot path; for vcs import)",
-                  foreground="#888888").pack(side="left")
+        ttk.Label(row, text="(import target)", foreground="#888888").pack(side="left")
         ttk.Label(row, text="Workers:").pack(side="left", padx=(8, 0))
         ttk.Spinbox(row, from_=1, to=32, width=4, textvariable=self.workers_var).pack(side="left")
 
@@ -152,11 +149,13 @@ class MainWindow(ttk.Frame):
         ttk.Separator(act, orient="vertical").pack(side="left", fill="y", padx=6)
         ttk.Button(act, text="Cancel", command=self.worker.cancel).pack(side="left", padx=2)
 
-        self._action_btns = [
-            self.refresh_btn, self.bulk_status_btn, self.bulk_pull_btn, self.bulk_import_btn,
-            self.sel_pull_btn, self.sel_push_btn, self.sel_sync_btn,
+        # enabled once connected with a credential
+        self._conn_btns = [
+            self.refresh_btn, self.sel_pull_btn, self.sel_push_btn, self.sel_sync_btn,
         ]
-        for b in self._action_btns:
+        # workspace-wide vcs ops: only when the meta/root node is selected
+        self._meta_btns = [self.bulk_status_btn, self.bulk_pull_btn, self.bulk_import_btn]
+        for b in self._conn_btns + self._meta_btns:
             b.state(["disabled"])
 
         # main split: tree (left) + log (right)
@@ -210,6 +209,7 @@ class MainWindow(ttk.Frame):
         self.menu.add_command(label="git log", command=lambda: self._repo_op("git log", commands.git_log))
         self.menu.add_command(label="git diff", command=lambda: self._repo_op("git diff", commands.git_diff))
         self.tree.bind("<Button-3>", self._popup)
+        self.tree.bind("<<TreeviewSelect>>", self._on_select)
 
         # status bar
         statusbar = ttk.Frame(self)
@@ -272,6 +272,14 @@ class MainWindow(ttk.Frame):
                     w.post(LogLine("vcstool not installed on robot? (pip install vcstool)", "err"))
             # each repo's configured origin remote (the thing we pull/push against)
             _rcu, url_text, _erru = capture_exec(self._client, commands.git_remote_urls(ws))
+            # locate the .repos in the meta repo (used by vcs import)
+            _rcr, repos_out, _errr = capture_exec(self._client, commands.find_repos(ws))
+            found = [ln.strip() for ln in repos_out.splitlines() if ln.strip()]
+            self._meta_repos = found[0] if found else ""
+            if self._meta_repos:
+                w.post(LogLine(f"meta .repos: {self._meta_repos}", "info"))
+            else:
+                w.post(LogLine("no *.repos found in meta repo (vcs import disabled)", "info"))
             root = repolist.build_tree(
                 workspace_label=f"{self.alias_var.get()}:{ws}",
                 status_text=status_text,
@@ -297,12 +305,15 @@ class MainWindow(ttk.Frame):
         ws = self.workspace_var.get().strip()
         if not self._require(ws):
             return
-        repos_path = self.repos_var.get().strip()
-        if not repos_path:
-            messagebox.showwarning("vcsupdate", "Enter the remote .repos path on the robot first.")
+        if not self._meta_repos:
+            messagebox.showwarning(
+                "vcsupdate",
+                "No .repos found in the meta repo. Refresh the tree with the meta "
+                "repo present first.",
+            )
             return
         cmd = commands.with_cred(
-            commands.vcs_import_file(ws, self.prefix_var.get(), repos_path, self.workers_var.get()),
+            commands.vcs_import_file(ws, self.prefix_var.get(), self._meta_repos, self.workers_var.get()),
             self._git_ssh,
         )
         self._run_stream("vcs import", cmd)
@@ -423,6 +434,13 @@ class MainWindow(ttk.Frame):
                 self.tree.selection_set(iid)
             self.menu.tk_popup(event.x_root, event.y_root)
 
+    def _on_select(self, event=None) -> None:
+        """Enable workspace-wide vcs buttons only when the meta/root node is selected."""
+        meta_selected = bool(self._root_iid) and self._root_iid in self.tree.selection()
+        state = "!disabled" if (self._cred_ready and meta_selected) else "disabled"
+        for b in self._meta_btns:
+            b.state([state])
+
     # ---- tree rendering ----
     @staticmethod
     def _sync_str(node) -> str:
@@ -452,6 +470,7 @@ class MainWindow(ttk.Frame):
             tags=tuple(root_tags),
         )
         self._node_by_iid[root_iid] = root
+        self._root_iid = root_iid
         for node in root.children:
             tags = [STATE_TAG.get(node.state, "present")]
             if node.dirty:
@@ -463,6 +482,7 @@ class MainWindow(ttk.Frame):
                 tags=tuple(tags),
             )
             self._node_by_iid[iid] = node
+        self._on_select()  # selection cleared after rebuild → disable meta buttons
 
     # ---- worker pump ----
     def _drain(self) -> None:
@@ -480,8 +500,9 @@ class MainWindow(ttk.Frame):
             self._connected = True
             self._cred_ready = msg.cred_ok
             if msg.cred_ok:
-                for b in self._action_btns:
+                for b in self._conn_btns:
                     b.state(["!disabled"])
+                self._on_select()  # meta buttons depend on tree selection
                 self.status_var.set(f"Connected: {msg.host}  (git key fp {msg.detail})")
                 self.task_var.set("connected — credential injected")
                 self._log(f"connected to {msg.host}; git credential ready", "info")
