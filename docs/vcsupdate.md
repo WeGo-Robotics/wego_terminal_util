@@ -14,8 +14,8 @@ VSCode Source Control 처럼 repo별 브랜치·동기 상태(ahead/behind)·변
   **`/dev/shm`(tmpfs = RAM)** 에 `0600` 으로 업로드하고, git/vcs 가 `GIT_SSH_COMMAND`
   로 그 키를 쓰게 한다. clone/pull/fetch/**push** 모두 이 키로 인증.
 - **연결 종료 시 키 디렉토리 삭제** → 로봇 영구 디스크에 자격증명 미저장.
-- `vcs import` 는 운영자 PC의 `.repos` 내용을 SSH stdin 으로 전달 → 로봇에 파일을
-  미리 올릴 필요 없음.
+- 정의 비교는 **로봇에 이미 있는 `.repos`** 를 `cat` 으로 읽어 사용하고, `vcs import`
+  는 그 파일을 `--input` 으로 참조한다.
 
 ### 왜 agent forwarding 이 아닌가
 
@@ -67,7 +67,7 @@ python run_vcsupdate.py
 | **Robot** | `~/.ssh/config` Host 별칭 드롭다운. 로봇 SSH 접속 대상 |
 | **Workspace (remote)** | 로봇의 메타 워크스페이스 경로 (예: `radius-posco-ws`) |
 | **src subdir** | `.repos` 가 import 되는 하위 폴더. 기본 `src`. 루트면 비움 |
-| **.repos (local)** | 운영 PC 로컬의 `.repos` 정의 파일 (병합·import 용) |
+| **.repos (remote)** | 로봇에 이미 있는 `.repos` 경로 (워크스페이스 기준 상대 또는 절대). 병합·import 의 정의 소스. 비우면 정의 없이 실상태만 표시 |
 | **Workers** | vcstool 병렬 워커 수 (기본 8) |
 | **GitHub SSH key (local)** | 로봇에 주입할 키. 자동 탐지, 변경 가능 |
 
@@ -112,7 +112,7 @@ clone 되므로, **src subdir** 값으로 정의·실상태 경로를 맞춘다.
 ### 전체 일괄 (툴바)
 - **vcs status** — 워크스페이스 전체 verbose 상태(로그).
 - **vcs pull** — 모든 repo `vcs pull --nested`.
-- **vcs import** — 로컬 `.repos` 기준 신규 clone/동기화 (`src` 하위).
+- **vcs import** — 로봇의 remote `.repos`(`--input`) 기준 신규 clone/동기화 (`src` 하위).
 
 ### 선택 repo (툴바 / 우클릭 메뉴)
 - **git pull** — `git pull --ff-only`.

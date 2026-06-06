@@ -80,12 +80,21 @@ def vcs_import_stdin(ws: str, subdir: str = "src", workers: int = 8) -> str:
     return _in_dir(ws, f"vcs import {shquote(target)} --workers {int(workers)}")
 
 
-def vcs_import(ws: str, repos_file: str, workers: int = 8) -> str:
-    """Clone/sync repos from ``repos_file`` already present on the robot."""
+def vcs_import_file(ws: str, subdir: str = "src", repos_file: str = "", workers: int = 8) -> str:
+    """Clone/sync repos into ``subdir`` from a .repos file already on the robot.
+
+    ``repos_file`` may be relative to the workspace (it runs with cwd = ws).
+    """
+    target = subdir.strip() or "."
     return _in_dir(
         ws,
-        f"vcs import . --input {shquote(repos_file)} --workers {int(workers)}",
+        f"vcs import {shquote(target)} --input {shquote(repos_file)} --workers {int(workers)}",
     )
+
+
+def cat(ws: str, path: str) -> str:
+    """Read a file on the robot (relative to the workspace, or absolute)."""
+    return _in_dir(ws, f"cat {shquote(path)}")
 
 
 def vcs_validate_stdin() -> str:

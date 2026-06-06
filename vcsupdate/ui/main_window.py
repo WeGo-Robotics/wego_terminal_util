@@ -8,7 +8,6 @@ and posts dataclass messages onto a queue that ``_drain`` pumps into the UI via
 
 from __future__ import annotations
 
-import os
 import posixpath
 import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext, simpledialog, ttk
@@ -112,9 +111,10 @@ class MainWindow(ttk.Frame):
         ttk.Entry(row, textvariable=self.workspace_var, width=28).pack(side="left", padx=2)
         ttk.Label(row, text="src subdir:").pack(side="left", padx=(8, 0))
         ttk.Entry(row, textvariable=self.prefix_var, width=6).pack(side="left", padx=2)
-        ttk.Label(row, text=".repos (local):").pack(side="left", padx=(8, 0))
-        ttk.Entry(row, textvariable=self.repos_var, width=28).pack(side="left", padx=2)
-        ttk.Button(row, text="…", width=3, command=self._browse_repos).pack(side="left")
+        ttk.Label(row, text=".repos (remote):").pack(side="left", padx=(8, 0))
+        ttk.Entry(row, textvariable=self.repos_var, width=24).pack(side="left", padx=2)
+        ttk.Label(row, text="(path on robot, rel. to workspace)",
+                  foreground="#888888").pack(side="left")
         ttk.Label(row, text="Workers:").pack(side="left", padx=(8, 0))
         ttk.Spinbox(row, from_=1, to=32, width=4, textvariable=self.workers_var).pack(side="left")
 
@@ -260,11 +260,19 @@ class MainWindow(ttk.Frame):
         ws = self.workspace_var.get().strip()
         if not self._require(ws):
             return
-        repos_text = self._read_local_repos()
+        repos_path = self.repos_var.get().strip()
         self._save_settings()
         self.task_var.set("refreshing tree…")
 
         def task(w: WorkerThread) -> None:
+            # read the .repos that lives on the robot (defined set)
+            repos_text = ""
+            if repos_path:
+                rc0, repos_text, err0 = capture_exec(self._client, commands.cat(ws, repos_path))
+                if rc0 != 0:
+                    w.post(LogLine(f"cannot read remote .repos ({repos_path}): "
+                                   f"{err0.strip()}", "err"))
+                    repos_text = ""
             w.post(LogLine(f"$ {commands.vcs_export(ws)}", "info"))
             rc, export_text, err = capture_exec(self._client, commands.vcs_export(ws))
             if rc != 0:
@@ -299,15 +307,15 @@ class MainWindow(ttk.Frame):
         ws = self.workspace_var.get().strip()
         if not self._require(ws):
             return
-        repos_text = self._read_local_repos()
-        if not repos_text.strip():
-            messagebox.showwarning("vcsupdate", "Pick a local .repos file for import first.")
+        repos_path = self.repos_var.get().strip()
+        if not repos_path:
+            messagebox.showwarning("vcsupdate", "Enter the remote .repos path on the robot first.")
             return
         cmd = commands.with_cred(
-            commands.vcs_import_stdin(ws, self.prefix_var.get(), self.workers_var.get()),
+            commands.vcs_import_file(ws, self.prefix_var.get(), repos_path, self.workers_var.get()),
             self._git_ssh,
         )
-        self._run_stream("vcs import", cmd, stdin_data=repos_text)
+        self._run_stream("vcs import", cmd)
 
     # ---- per-repo actions ----
     def _selected_repos(self):
@@ -412,25 +420,6 @@ class MainWindow(ttk.Frame):
             messagebox.showwarning("vcsupdate", "Enter the remote workspace path.")
             return False
         return True
-
-    def _read_local_repos(self) -> str:
-        path = self.repos_var.get().strip()
-        if not path or not os.path.isfile(path):
-            return ""
-        try:
-            with open(path, encoding="utf-8") as f:
-                return f.read()
-        except OSError as exc:
-            self._log(f"cannot read .repos: {exc}", "err")
-            return ""
-
-    def _browse_repos(self) -> None:
-        path = filedialog.askopenfilename(
-            title="Select .repos file",
-            filetypes=[("repos files", "*.repos *.yaml *.yml"), ("all files", "*.*")],
-        )
-        if path:
-            self.repos_var.set(path)
 
     def _browse_key(self) -> None:
         path = filedialog.askopenfilename(title="Select GitHub SSH private key")

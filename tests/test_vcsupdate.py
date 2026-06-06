@@ -33,6 +33,12 @@ class CommandsTest(unittest.TestCase):
             commands.vcs_import_stdin("/home/ws", "", 8),
             "cd /home/ws && vcs import . --workers 8",
         )
+        self.assertEqual(
+            commands.vcs_import_file("/home/ws", "src", "radius.repos", 8),
+            "cd /home/ws && vcs import src --input radius.repos --workers 8",
+        )
+        self.assertEqual(commands.cat("/home/ws", "radius.repos"),
+                         "cd /home/ws && cat radius.repos")
 
     def test_path_with_spaces_is_quoted(self):
         cmd = commands.vcs_status("/home/my ws")
